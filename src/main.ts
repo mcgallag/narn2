@@ -1,8 +1,9 @@
-import { FetchEpicGamesDeals, Deal } from './EpicGamesWrapper';
 import * as Discord from "discord.js";
-import fs = require("fs");
-import dotenv = require('dotenv');
+import * as fs from "fs";
+import * as dotenv from "dotenv";
 import { setTimeout } from 'timers';
+import { FetchEpicGamesDeals, Deal } from './EpicGamesWrapper';
+
 dotenv.config();
 
 function ErrorLog(err: string): void {

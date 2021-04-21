@@ -1,5 +1,4 @@
-import nodefetch = require("node-fetch");
-const fetch = nodefetch.default;
+import fetch from "node-fetch";
 
 export interface Deal {
   title: string;
