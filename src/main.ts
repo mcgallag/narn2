@@ -37,20 +37,21 @@ function GetDealsFromDisk(): Deal[] {
 }
 
 /**
- * Returns `true` if deal ends in less than 16 hours
+ * Returns `true` if deal ends in less than 16 hours. Returns false if deal is expired.
  * @param deal 
  * @returns 
  */
 function DealExpiresToday(deal: Deal): boolean {
   let diff = deal.endDate.getTime() - Date.now();
   const sixteenHours = 16 * 60 * 60 * 1000;
-  return diff < sixteenHours;
+  return diff < sixteenHours && diff > 0;
 }
 
 function DailyRoutine(): void {
   let localDeals = GetDealsFromDisk();
   // remove any dead deals that expired since last iteration
   localDeals = localDeals.filter(deal => (deal.endDate.getTime() > Date.now()))
+  let dealsExpire: boolean = false;
 
   // grab free games from EGS server
   FetchEpicGamesDeals()
@@ -68,6 +69,7 @@ function DailyRoutine(): void {
 
       // find any deals that end today, report as last chance
       let expiringToday = localDeals.filter(deal => DealExpiresToday(deal));
+      dealsExpire = expiringToday.length > 0;
       let output: Discord.MessageEmbed[] = expiringToday.map(deal => CreateEmbedForDeal(deal));
       // report any new deals also
       output.push(...newDeals.map(deal => CreateEmbedForDeal(deal)));
@@ -84,9 +86,17 @@ function DailyRoutine(): void {
     .finally(() => {
       // run again at 7am tomorrow
       let now = Date.now();
-      now += (1000 * 60 * 60 * 24);
-      let timeout = new Date(now);
-      timeout.setHours(7, 0, 0, 0);
+      let timeout: Date;
+      if (!dealsExpire) {
+        // nothing expires today, check again tomorrow morning
+        now += (1000 * 60 * 60 * 24);
+        timeout = new Date(now);
+        timeout.setHours(7, 0, 0, 0);
+      } else {
+        // deals expire today, check later
+        timeout = new Date(now);
+        timeout.setHours(11, 1, 0, 0); //TODO: extract from returned data instead of hard coding at 11am
+      }
       setTimeout(DailyRoutine, timeout.getTime() - Date.now());
     });
 }
