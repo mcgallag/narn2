@@ -3,3 +3,4 @@ node_modules
 yarn.lock
 dist
 saved_deals.json
+narn_error.log

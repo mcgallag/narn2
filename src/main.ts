@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { setTimeout } from 'timers';
 import { FetchEpicGamesDeals, Deal } from './EpicGamesWrapper';
+import { Canvas, createCanvas, loadImage } from "canvas";
 
 dotenv.config();
 
@@ -47,15 +48,15 @@ function DealExpiresToday(deal: Deal): boolean {
   return diff < sixteenHours && diff > 0;
 }
 
-function DailyRoutine(): void {
+async function DailyRoutine(): Promise<void> {
   let localDeals = GetDealsFromDisk();
   // remove any dead deals that expired since last iteration
   localDeals = localDeals.filter(deal => (deal.endDate.getTime() > Date.now()))
   let dealsExpire: boolean = false;
 
   // grab free games from EGS server
-  FetchEpicGamesDeals()
-    .then(fetchedDeals => {
+  return FetchEpicGamesDeals()
+    .then(async (fetchedDeals) => {
       // add any new deals to local cache
       let newDeals: Deal[] = [];
       fetchedDeals.forEach(deal => {
@@ -70,9 +71,15 @@ function DailyRoutine(): void {
       // find any deals that end today, report as last chance
       let expiringToday = localDeals.filter(deal => DealExpiresToday(deal));
       dealsExpire = expiringToday.length > 0;
-      let output: Discord.MessageEmbed[] = expiringToday.map(deal => CreateEmbedForDeal(deal));
+      let output: Discord.MessageEmbed[] = [];
+
+      if (expiringToday.length > 0) {
+        output.push(await CreateMultiDealEmbed(expiringToday));
+      }
       // report any new deals also
-      output.push(...newDeals.map(deal => CreateEmbedForDeal(deal)));
+      if (newDeals.length > 0) {
+        output.push(await CreateMultiDealEmbed(newDeals));
+      }
       // send to the 'scord
       if (output.length == 0) {
         console.log("nothing new found");
@@ -101,6 +108,95 @@ function DailyRoutine(): void {
     });
 }
 
+async function CreateMultiDealEmbed(deals: Deal[]): Promise<Discord.MessageEmbed> {
+  let embed = new Discord.MessageEmbed();
+
+  let color: number;
+  let description: string;
+
+  let now = Date.now();
+  if (now < deals[0].startDate.getTime()) {
+    // deal has not started yet
+    color = 0xdad45e;
+    description = "Sensors have detected an upcoming free game.";
+  } else if (DealExpiresToday(deals[0])) {
+    // deal expires today
+    color = 0xd04648;
+    description = "Last chance! This deal expires today.";
+  } else {
+    // deal is current and active
+    color = 0x346524;
+    description = "This deal is currently ongoing.";
+  }
+
+  embed.setColor(color);
+
+  // Construct title. Should look like "Worms 1, Worms 2, and Worms Armageddon"
+  let title = deals[0].title;
+  if (deals.length == 2) {
+    title += ` and ${deals[1].title}`;
+  } else if (deals.length > 2) {
+    for (let i = 1; i < deals.length; i++) {
+      if (i == deals.length - 1) {
+        title += `, and ${deals[i].title}`;
+      } else {
+        title += `, ${deals[i].title}`;
+      }
+    }
+  }
+  embed.setTitle(title);
+
+  if (deals.length == 1) {
+    embed.setURL(`https://www.epicgames.com/store/en-US/p/${deals[0].slug}`);
+  } else {
+    embed.setURL("https://www.epicgames.com/store/en-US/free-games");
+  }
+
+  embed.setAuthor("Epic Games Store", "attachment://egs_logo.png", "https://www.epicgames.com/store/");
+  embed.setDescription(description);
+  embed.setThumbnail(client.user.avatarURL());
+
+  deals.forEach(deal => embed.addField(deal.title, `~~$${deal.originalPrice / 100}~~ **FREE**`, false));
+
+  //TODO: Create a thumbnail image of all deals
+  let canvas = await CreateMultiThumbnail(deals);
+
+  embed.setImage("attachment://multi.jpg");
+
+  let footer = "Offer found by the Narn, ";
+  footer += deals[0].active ? "ends " : "begins ";
+  footer += deals[0].active ? deals[0].endDate.toDateString() : deals[0].startDate.toDateString();
+  embed.setFooter(footer, client.user.avatarURL());
+
+  embed.attachFiles([
+    new Discord.MessageAttachment("./assets/egs_logo.png"),
+    new Discord.MessageAttachment(canvas.createJPEGStream(), "multi.jpg")
+  ]);
+
+  return Promise.resolve(embed);
+}
+
+async function CreateMultiThumbnail(deals: Deal[]): Promise<Canvas> {
+  let width = 0;
+  let height = 0;
+  let images = [];
+  for (let i = 0; i < deals.length; i++) {
+    let ima = await loadImage(deals[i].image);
+    images.push(ima);
+    width += ima.width;
+    height = Math.max(height, ima.height);
+  }
+  let canvas = createCanvas(width, height);
+  let ctx = canvas.getContext("2d");
+  let x = 0;
+  for (let i = 0; i < deals.length; i++) {
+    ctx.drawImage(images[i], x, 0);
+    x += images[i].width;
+  }
+  return Promise.resolve(canvas);
+}
+
+//TODO: No longer needed? Delete
 function CreateEmbedForDeal(deal: Deal): Discord.MessageEmbed {
   let embed = new Discord.MessageEmbed();
 
@@ -149,10 +245,10 @@ function CreateEmbedForDeal(deal: Deal): Discord.MessageEmbed {
 const client = new Discord.Client();
 let channel: Discord.TextChannel;
 client.once('ready', () => {
-  // find pin-commander snowflake
-  // let channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "pin-commander"));
   //DEBUG: use test channel
   channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.id == "536674689872035840")) as Discord.TextChannel;
+  //PRODUCTION: use #wingnut
+  // channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "wingnut")) as Discord.TextChannel;
   setTimeout(DailyRoutine, 0);
 });
 
