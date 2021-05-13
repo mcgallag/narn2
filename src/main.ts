@@ -22,17 +22,20 @@ function GetDealsFromDisk(): Deal[] {
   if (fs.existsSync(process.env.SAVED_DEALS)) {
     let raw = fs.readFileSync(process.env.SAVED_DEALS, "utf8");
     let json = JSON.parse(raw);
+    let now = Date.now();
     return json.map((obj: any): Deal => {
+      let start = new Date(obj.startDate);
+      let end = new Date(obj.endDate);
       return {
         title: obj.title,
-        startDate: new Date(obj.startDate),
-        endDate: new Date(obj.endDate),
+        startDate: start,
+        endDate: end,
         originalPrice: obj.originalPrice,
         image: obj.image,
         slug: obj.slug,
-        active: obj.active
-      }
-    })
+        active: (now > start.getTime() && now < end.getTime())
+      };
+    });
   }
   return [];
 }
@@ -52,7 +55,7 @@ async function DailyRoutine(): Promise<void> {
   let localDeals = GetDealsFromDisk();
   // remove any dead deals that expired since last iteration
   localDeals = localDeals.filter(deal => (deal.endDate.getTime() > Date.now()))
-  let dealsExpire: boolean = false;
+  let expiringToday: Deal[];
 
   // grab free games from EGS server
   return FetchEpicGamesDeals()
@@ -68,9 +71,8 @@ async function DailyRoutine(): Promise<void> {
       });
       WriteDealsToDisk(localDeals);
 
-      // find any deals that end today, report as last chance
-      let expiringToday = localDeals.filter(deal => DealExpiresToday(deal));
-      dealsExpire = expiringToday.length > 0;
+      // find any deals that end today, report as last chance, sort by the soonest to expire
+      expiringToday = localDeals.filter(deal => DealExpiresToday(deal)).sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
       let output: Discord.MessageEmbed[] = [];
 
       if (expiringToday.length > 0) {
@@ -81,9 +83,6 @@ async function DailyRoutine(): Promise<void> {
         output.push(await CreateMultiDealEmbed(newDeals));
       }
       // send to the 'scord
-      if (output.length == 0) {
-        console.log("nothing new found");
-      }
       output.forEach(msg => channel.send(msg));
     })
     .catch(err => {
@@ -91,18 +90,25 @@ async function DailyRoutine(): Promise<void> {
       ErrorLog(err);
     })
     .finally(() => {
-      // run again at 7am tomorrow
+      let d = new Date();
       let now = Date.now();
       let timeout: Date;
-      if (!dealsExpire) {
-        // nothing expires today, check again tomorrow morning
-        now += (1000 * 60 * 60 * 24);
-        timeout = new Date(now);
-        timeout.setHours(7, 0, 0, 0);
+      if (expiringToday.length == 0) {
+        // nothing expires today
+        if (d.getDay() == 4 && d.getHours() < 12) {
+          // thursday, check at noon for new stuff
+          timeout = new Date();
+          timeout.setHours(12, 30, 0, 0);
+        } else {
+          // run again at 7am tomorrow
+          now += (1000 * 60 * 60 * 24);
+          timeout = new Date(now);
+          timeout.setHours(7, 0, 0, 0);
+        }
       } else {
         // deals expire today, check later
-        timeout = new Date(now);
-        timeout.setHours(11, 1, 0, 0); //TODO: extract from returned data instead of hard coding at 11am
+        const halfhour = 30 * 60 * 1000;
+        timeout = new Date(expiringToday[0].endDate.getTime() + halfhour);
       }
       setTimeout(DailyRoutine, timeout.getTime() - Date.now());
     });
@@ -246,9 +252,9 @@ const client = new Discord.Client();
 let channel: Discord.TextChannel;
 client.once('ready', () => {
   //DEBUG: use test channel
-  channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.id == "536674689872035840")) as Discord.TextChannel;
+  //channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.id == "536674689872035840")) as Discord.TextChannel;
   //PRODUCTION: use #wingnut
-  // channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "wingnut")) as Discord.TextChannel;
+  channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "wingnut")) as Discord.TextChannel;
   setTimeout(DailyRoutine, 0);
 });
 
