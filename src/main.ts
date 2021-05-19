@@ -5,6 +5,8 @@ import { setTimeout } from 'timers';
 import { FetchEpicGamesDeals, Deal } from './EpicGamesWrapper';
 import { Canvas, createCanvas, loadImage } from "canvas";
 
+const debug = false;
+
 dotenv.config();
 
 function ErrorLog(err: string): void {
@@ -60,6 +62,8 @@ async function DailyRoutine(): Promise<void> {
   // grab free games from EGS server
   return FetchEpicGamesDeals()
     .then(async (fetchedDeals) => {
+      // remove any deals that returned with invalid start/end dates - bugfix MCG 5/19
+      fetchedDeals = fetchedDeals.filter(deal => deal.startDate !== null && deal.endDate !== null);
       // add any new deals to local cache
       let newDeals: Deal[] = [];
       fetchedDeals.forEach(deal => {
@@ -251,10 +255,13 @@ function CreateEmbedForDeal(deal: Deal): Discord.MessageEmbed {
 const client = new Discord.Client();
 let channel: Discord.TextChannel;
 client.once('ready', () => {
-  //DEBUG: use test channel
-  //channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.id == "536674689872035840")) as Discord.TextChannel;
-  //PRODUCTION: use #wingnut
-  channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "wingnut")) as Discord.TextChannel;
+  if (debug) {
+    //DEBUG: use test channel
+    channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.id == "536674689872035840")) as Discord.TextChannel;
+  } else {
+    //PRODUCTION: use #wingnut
+    channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "wingnut")) as Discord.TextChannel;
+  }
   setTimeout(DailyRoutine, 0);
 });
 
