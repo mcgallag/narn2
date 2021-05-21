@@ -86,8 +86,15 @@ function BuildDealObject(data: EGSOfferData): Deal {
     throw "Error in returned JSON data. Title is null.";
   }
 
+  //TODO: Figure out a better way of fixing these stupid mystery games
+  if (data.title.includes("Mystery Game")) {
+    return null;
+  }
+
   // original price
-  if (data.price.totalPrice.originalPrice) {
+
+  //HACK: this will probably break something else
+  if (data.price.totalPrice.originalPrice !== null) {
     deal.originalPrice = data.price.totalPrice.originalPrice;
   } else {
     if (data.price.totalPrice.originalPrice == 0) {
@@ -139,8 +146,12 @@ function BuildDealObject(data: EGSOfferData): Deal {
   // image
   let images = data.keyImages;
   images.forEach((image: any) => {
-    if (image.type == "Thumbnail") {
-      deal.image = image.url;
+    if (deal.image === null) {
+      if (image.type == "Thumbnail") {
+        deal.image = image.url;
+      } else if (image.type == "DieselStoreFrontTall") {
+        deal.image = image.url;
+      }
     }
   });
   if (deal.image == null) {
