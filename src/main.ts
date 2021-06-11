@@ -74,9 +74,16 @@ async function DailyRoutine(): Promise<void> {
         }
       });
       WriteDealsToDisk(localDeals);
+      // Filter out any deals that haven't started yet, these will be reported separately
+      // This is required to accommodate "myster games" that don't reveal until the deal starts - MCG 6/11
+      newDeals = newDeals.filter(deal => Date.now() > deal.startDate.getTime());
 
       // find any deals that end today, report as last chance, sort by the soonest to expire
       expiringToday = localDeals.filter(deal => DealExpiresToday(deal)).sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
+
+      // find any deals that are upcoming and haven't started yet - MCG 6/11
+      let upcomingDeals = localDeals.filter(deal => Date.now() < deal.startDate.getTime());
+
       let output: Discord.MessageEmbed[] = [];
 
       if (expiringToday.length > 0) {
@@ -85,6 +92,10 @@ async function DailyRoutine(): Promise<void> {
       // report any new deals also
       if (newDeals.length > 0) {
         output.push(await CreateMultiDealEmbed(newDeals));
+      }
+      // report any upcoming deals
+      if (upcomingDeals.length > 0) {
+        output.push(await CreateMultiDealEmbed(upcomingDeals));
       }
       // send to the 'scord
       output.forEach(msg => channel.send(msg));
@@ -188,20 +199,37 @@ async function CreateMultiDealEmbed(deals: Deal[]): Promise<Discord.MessageEmbed
 
 async function CreateMultiThumbnail(deals: Deal[]): Promise<Canvas> {
   let width = 0;
-  let height = 0;
+  let height = Infinity;
   let images = [];
+
+  let sizes = [];
+
   for (let i = 0; i < deals.length; i++) {
     let ima = await loadImage(deals[i].image);
     images.push(ima);
-    width += ima.width;
-    height = Math.max(height, ima.height);
+    height = Math.min(height, ima.height);
+    sizes.push({
+      width: ima.width,
+      height: ima.height
+    });
   }
+
+  // normalize image sizes
+  for (let i = 0; i < sizes.length; i++) {
+    if (sizes[i].height > height) {
+      let scale = height / sizes[i].height;
+      sizes[i].width = sizes[i].width * scale;
+      sizes[i].height = height;
+    }
+    width += sizes[i].width;
+  }
+
   let canvas = createCanvas(width, height);
   let ctx = canvas.getContext("2d");
   let x = 0;
   for (let i = 0; i < deals.length; i++) {
-    ctx.drawImage(images[i], x, 0);
-    x += images[i].width;
+    ctx.drawImage(images[i], x, 0, sizes[i].width, sizes[i].height);
+    x += sizes[i].width;
   }
   return Promise.resolve(canvas);
 }
