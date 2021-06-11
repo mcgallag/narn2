@@ -75,7 +75,7 @@ async function DailyRoutine(): Promise<void> {
       });
       WriteDealsToDisk(localDeals);
       // Filter out any deals that haven't started yet, these will be reported separately
-      // This is required to accommodate "myster games" that don't reveal until the deal starts - MCG 6/11
+      // This is required to accommodate "mystery games" that don't reveal until the deal starts - MCG 6/11
       newDeals = newDeals.filter(deal => Date.now() > deal.startDate.getTime());
 
       // find any deals that end today, report as last chance, sort by the soonest to expire
@@ -179,7 +179,6 @@ async function CreateMultiDealEmbed(deals: Deal[]): Promise<Discord.MessageEmbed
 
   deals.forEach(deal => embed.addField(deal.title, `~~$${deal.originalPrice / 100}~~ **FREE**`, false));
 
-  //TODO: Create a thumbnail image of all deals
   let canvas = await CreateMultiThumbnail(deals);
 
   embed.setImage("attachment://multi.jpg");
@@ -232,52 +231,6 @@ async function CreateMultiThumbnail(deals: Deal[]): Promise<Canvas> {
     x += sizes[i].width;
   }
   return Promise.resolve(canvas);
-}
-
-//TODO: No longer needed? Delete
-function CreateEmbedForDeal(deal: Deal): Discord.MessageEmbed {
-  let embed = new Discord.MessageEmbed();
-
-  // vary depending on if deal is current, upcoming, or expiring
-  let color: number;
-  let description: string;
-
-  let now = Date.now();
-  if (now < deal.startDate.getTime()) {
-    // deal has not started yet
-    color = 0xdad45e;
-    description = "Sensors have detected an upcoming free game."
-  } else if (DealExpiresToday(deal)) {
-    // deal expires today
-    color = 0xd04648;
-    description = "Last chance! This deal expires today.";
-  } else {
-    // deal is active and not expiring today
-    color = 0x346524;
-    description = "This deal is currently ongoing.";
-  }
-  embed.setColor(color);
-  embed.setTitle(deal.title);
-  embed.setURL(`https://www.epicgames.com/store/en-US/p/${deal.slug}`);
-  embed.setAuthor("Epic Games Store", "attachment://egs_logo.png", "https://www.epicgames.com/store/");
-  embed.setDescription(description);
-  embed.setThumbnail(client.user.avatarURL());
-  embed.addFields(
-    { name: "Regular Price", value: `$${deal.originalPrice / 100}`, inline: true },
-    { name: "Sale Starts", value: deal.startDate.toDateString(), inline: true }
-  );
-  embed.setImage(deal.image);
-
-  let footer = "Offer found by the Narn, ";
-  footer += deal.active ? "ends " : "begins ";
-  footer += deal.active ? deal.endDate.toDateString() : deal.startDate.toDateString();
-  embed.setFooter(footer, client.user.avatarURL());
-
-  embed.attachFiles([
-    new Discord.MessageAttachment("./assets/egs_logo.png")
-  ]);
-
-  return embed;
 }
 
 const client = new Discord.Client();
