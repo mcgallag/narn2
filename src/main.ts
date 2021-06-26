@@ -82,7 +82,8 @@ async function DailyRoutine(): Promise<void> {
       expiringToday = localDeals.filter(deal => DealExpiresToday(deal)).sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
 
       // find any deals that are upcoming and haven't started yet - MCG 6/11
-      let upcomingDeals = localDeals.filter(deal => Date.now() < deal.startDate.getTime());
+      // bugfix - filter from new deals MCG 6/26
+      let upcomingDeals = newDeals.filter(deal => Date.now() < deal.startDate.getTime());
 
       let output: Discord.MessageEmbed[] = [];
 

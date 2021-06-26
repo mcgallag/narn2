@@ -10,8 +10,10 @@ export interface Deal {
   active: boolean;
 }
 
+const EPIC_GAMES_URL = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions";
+
 export async function FetchEpicGamesDeals(): Promise<Deal[]> {
-  return fetch(process.env.EPIC_GAMES_URL)
+  return fetch(EPIC_GAMES_URL)
     .then(res => res.json())
     .then(json => {
       let deals = ParseReturnedData(json.data);
