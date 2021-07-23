@@ -47,7 +47,7 @@ function GetDealsFromDisk(): Deal[] {
  * @param deal 
  * @returns 
  */
-function DealExpiresToday(deal: Deal): boolean {
+ function DealExpiresToday(deal: Deal): boolean {
   let diff = deal.endDate.getTime() - Date.now();
   const sixteenHours = 16 * 60 * 60 * 1000;
   return diff < sixteenHours && diff > 0;
@@ -62,8 +62,11 @@ async function DailyRoutine(): Promise<void> {
   // grab free games from EGS server
   return FetchEpicGamesDeals()
     .then(async (fetchedDeals) => {
+      let now = new Date();
       // remove any deals that returned with invalid start/end dates - bugfix MCG 5/19
-      fetchedDeals = fetchedDeals.filter(deal => deal.startDate !== null && deal.endDate !== null);
+      // remove any deals that have not started yet, only reporting current deals - feature change MCG 7/23
+      fetchedDeals = fetchedDeals.filter(deal => (deal.startDate !== null && deal.endDate !== null) && (deal.startDate.getTime() < now.getTime()));
+
       // add any new deals to local cache
       let newDeals: Deal[] = [];
       fetchedDeals.forEach(deal => {
@@ -73,17 +76,16 @@ async function DailyRoutine(): Promise<void> {
           newDeals.push(deal);
         }
       });
+
       WriteDealsToDisk(localDeals);
-      // Filter out any deals that haven't started yet, these will be reported separately
-      // This is required to accommodate "mystery games" that don't reveal until the deal starts - MCG 6/11
-      newDeals = newDeals.filter(deal => Date.now() > deal.startDate.getTime());
 
       // find any deals that end today, report as last chance, sort by the soonest to expire
       expiringToday = localDeals.filter(deal => DealExpiresToday(deal)).sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
 
       // find any deals that are upcoming and haven't started yet - MCG 6/11
       // bugfix - filter from new deals MCG 6/26
-      let upcomingDeals = newDeals.filter(deal => Date.now() < deal.startDate.getTime());
+      // disabling upcoming deals for now MCG 7/23
+      // let upcomingDeals = newDeals.filter(deal => Date.now() < deal.startDate.getTime());
 
       let output: Discord.MessageEmbed[] = [];
 
@@ -94,10 +96,11 @@ async function DailyRoutine(): Promise<void> {
       if (newDeals.length > 0) {
         output.push(await CreateMultiDealEmbed(newDeals));
       }
-      // report any upcoming deals
-      if (upcomingDeals.length > 0) {
-        output.push(await CreateMultiDealEmbed(upcomingDeals));
-      }
+      // report any upcoming deals - disabled for now MCG 7/23
+      // if (upcomingDeals.length > 0) {
+      //   output.push(await CreateMultiDealEmbed(upcomingDeals));
+      // }
+      
       // send to the 'scord
       output.forEach(msg => channel.send(msg));
     })
@@ -106,28 +109,25 @@ async function DailyRoutine(): Promise<void> {
       ErrorLog(err);
     })
     .finally(() => {
-      let d = new Date();
-      let now = Date.now();
-      let timeout: Date;
-      if (expiringToday.length == 0) {
-        // nothing expires today
-        if (d.getDay() == 4 && d.getHours() < 12) {
-          // thursday, check at noon for new stuff
-          timeout = new Date();
-          timeout.setHours(12, 30, 0, 0);
-        } else {
-          // run again at 7am tomorrow
-          now += (1000 * 60 * 60 * 24);
-          timeout = new Date(now);
-          timeout.setHours(7, 0, 0, 0);
-        }
-      } else {
-        // deals expire today, check later
-        const halfhour = 30 * 60 * 1000;
-        timeout = new Date(expiringToday[0].endDate.getTime() + halfhour);
-      }
+      let timeout = GetTimeout();
       setTimeout(DailyRoutine, timeout.getTime() - Date.now());
     });
+}
+
+function GetTimeout(): Date {
+  let now = new Date();
+  let timeout: Date;
+  if (now.getDate() == 4 && now.getHours() < 12) {
+    // thursday, check after noon for new stuff
+    timeout = new Date();
+    timeout.setHours(12, 30, 0, 0);
+  } else {
+    // run again at 7am tomorrow
+    timeout = new Date(now.getTime() + (1000 * 60 * 60 * 24));
+    timeout.setHours(7, 0, 0, 0);
+  }
+
+  return timeout;
 }
 
 async function CreateMultiDealEmbed(deals: Deal[]): Promise<Discord.MessageEmbed> {
@@ -244,7 +244,7 @@ client.once('ready', () => {
     //PRODUCTION: use #wingnut
     channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "wingnut")) as Discord.TextChannel;
   }
-  setTimeout(DailyRoutine, 0);
+  setTimeout(DailyRoutine, GetTimeout().getTime() - Date.now());
 });
 
 client.login(process.env.BOT_TOKEN);
