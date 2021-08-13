@@ -47,7 +47,7 @@ function GetDealsFromDisk(): Deal[] {
  * @param deal 
  * @returns 
  */
- function DealExpiresToday(deal: Deal): boolean {
+function DealExpiresToday(deal: Deal): boolean {
   let diff = deal.endDate.getTime() - Date.now();
   const sixteenHours = 16 * 60 * 60 * 1000;
   return diff < sixteenHours && diff > 0;
@@ -100,7 +100,7 @@ async function DailyRoutine(): Promise<void> {
       // if (upcomingDeals.length > 0) {
       //   output.push(await CreateMultiDealEmbed(upcomingDeals));
       // }
-      
+
       // send to the 'scord
       output.forEach(msg => channel.send(msg));
     })
@@ -244,7 +244,11 @@ client.once('ready', () => {
     //PRODUCTION: use #wingnut
     channel = client.channels.cache.find(ch => (ch instanceof Discord.TextChannel && ch.name == "wingnut")) as Discord.TextChannel;
   }
-  setTimeout(DailyRoutine, GetTimeout().getTime() - Date.now());
+  if (!fs.existsSync(process.env.SAVED_DEALS)) {
+    DailyRoutine();
+  } else {
+    setTimeout(DailyRoutine, GetTimeout().getTime() - Date.now());
+  }
 });
 
 client.login(process.env.BOT_TOKEN);
