@@ -68,6 +68,7 @@ interface EGSOfferData {
   promotions?: EGSTotalPromotions;
   keyImages?: EGSImageData[];
   productSlug?: string;
+  urlSlug?: string;
 }
 
 function BuildDealObject(data: EGSOfferData): Deal {
@@ -163,6 +164,8 @@ function BuildDealObject(data: EGSOfferData): Deal {
   // slug
   if (data.productSlug) {
     deal.slug = data.productSlug;
+  } else if (data.urlSlug) {
+    deal.slug = data.urlSlug;
   } else {
     throw "Error when parsing deal JSON. Couldn't find productSlug";
   }
